@@ -1,3 +1,6 @@
+import hashlib
+import random
+
 def euclidean_algorithm(a, b):
     while b:
         a, b = b, a % b
@@ -24,3 +27,16 @@ def is_prime(num):
         if num % i == 0:
             return False
     return True
+
+def get_hash(message):
+    return hashlib.sha256(message.encode()).hexdigest()
+
+def encrypt(public_key, message):
+    e, n = public_key
+    encrypted_msg = [pow(ord(char), e, n) for char in message]
+    return encrypted_msg
+
+def decrypt(private_key, cipher):
+    d, n = private_key
+    decrypted_chars = [chr(pow(char, d, n)) for char in cipher]
+    return "".join(decrypted_chars)

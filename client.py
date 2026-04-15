@@ -1,5 +1,7 @@
 import socket
 import threading
+import json
+from modular_operations import generate_keypair, encrypt, decrypt, get_hash
 
 class Client:
     def __init__(self, server_ip: str, port: int, username: str) -> None:
@@ -18,10 +20,14 @@ class Client:
         self.s.send(self.username.encode())
 
         # create key pairs
+        self.public_key, self.private_key = generate_keypair()
 
         # exchange public keys
+        self.s.send(json.dumps(self.public_key).encode())
 
         # receive the encrypted secret key
+        server_key_data = self.s.recv(4096).decode()
+        self.server_public_key = json.loads(server_key_data)
 
         message_handler = threading.Thread(target=self.read_handler,args=())
         message_handler.start()
@@ -30,12 +36,19 @@ class Client:
 
     def read_handler(self):
         while True:
-            message = self.s.recv(1024).decode()
+            message = self.s.recv(4096).decode()
 
-            # decrypt message with the secrete key
+            try:
+                data_packet = json.loads(message)
 
-            # ...
+                decrypted_text = decrypt(self.private_key, data_packet["data"])
 
+                if get_hash(decrypted_text) == data_packet["hash"]:
+                    message = decrypted_text
+                else:
+                    message = "[ Integrity Error ]: Повідомлення було підроблено!"
+            except:
+                pass
 
             print(message)
 
@@ -44,10 +57,15 @@ class Client:
             message = input()
 
             # encrypt message with the secrete key
+            msg_hash = get_hash(message)
+            encrypted_msg = encrypt(self.server_public_key, message)
 
-            # ...
+            packet = json.dumps({
+                "hash": msg_hash,
+                "data": encrypted_msg
+            })
 
-            self.s.send(message.encode())
+            self.s.send(packet.encode())
 
 if __name__ == "__main__":
     cl = Client("127.0.0.1", 9001, "b_g")

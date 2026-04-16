@@ -1,6 +1,7 @@
 import socket
 import threading
 import json
+import time
 from modular_operations import generate_keypair, encrypt, decrypt, get_hash
 
 class Client:
@@ -18,7 +19,7 @@ class Client:
             return
 
         self.s.send(self.username.encode())
-
+        time.sleep(0.2)
         # create key pairs
         self.public_key, self.private_key = generate_keypair()
 
@@ -68,5 +69,5 @@ class Client:
             self.s.send(packet.encode())
 
 if __name__ == "__main__":
-    cl = Client("127.0.0.1", 9001, "b_g")
+    cl = Client("127.0.0.1", 9001, "Andrii")
     cl.init_connection()

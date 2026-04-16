@@ -1,5 +1,7 @@
 import socket
 import threading
+import json
+from modular_operations import generate_keypair, encrypt, decrypt, get_hash
 
 class Server:
 
@@ -8,6 +10,7 @@ class Server:
         self.port = port
         self.clients = []
         self.username_lookup = {}
+        self.client_keys = {}
         self.s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
 
     def start(self):
@@ -15,6 +18,8 @@ class Server:
         self.s.listen(100)
 
         # generate keys ...
+        self.public_key, self.private_key = generate_keypair()
+        print(f"[Сервер запущено] Згенеровано RSA ключі.")
 
         while True:
             c, addr = self.s.accept()
@@ -26,15 +31,9 @@ class Server:
 
             # send public key to the client
 
-            # ...
-
-            # encrypt the secret with the clients public key
-
-            # ...
-
-            # send the encrypted secret to a client
-
-            # ...
+            client_key_data = c.recv(4096).decode()
+            self.client_keys[c] = json.loads(client_key_data)
+            c.send(json.dumps(self.public_key).encode())
 
             threading.Thread(target=self.handle_client,args=(c,addr,)).start()
 
@@ -42,18 +41,60 @@ class Server:
         for client in self.clients:
 
             # encrypt the message
+            client_pub_key = self.client_keys.get(client)
+            if not client_pub_key:
+                continue
 
-            # ...
-
-            client.send(msg.encode())
+            msg_hash = get_hash(msg)
+            encrypted_msg = encrypt(client_pub_key, msg)
+            packet = json.dumps({
+                "hash": msg_hash,
+                "data": encrypted_msg
+            })
+            try:
+                client.send(packet.encode())
+            except:
+                pass
 
     def handle_client(self, c: socket, addr):
+        username = self.username_lookup.get(c, "Unknown")
         while True:
-            msg = c.recv(1024)
+            try:
+                raw_data = c.recv(4096).decode()
+                if not raw_data:
+                    break
 
-            for client in self.clients:
-                if client != c:
-                    client.send(msg)
+                packet = json.loads(raw_data)
+                received_hash = packet["hash"]
+                encrypted_data = packet["data"]
+
+                decrypted_msg = decrypt(self.private_key, encrypted_data)
+
+                if get_hash(decrypted_msg) == received_hash:
+                    final_msg = f"{username}: {decrypted_msg}"
+                    print(final_msg)
+
+                    for client in self.clients:
+                        if client != c:
+                            client_pub_key = self.client_keys[client]
+                            f_hash = get_hash(final_msg)
+                            f_enc = encrypt(client_pub_key, final_msg)
+
+                            f_packet = json.dumps({
+                                "hash": f_hash,
+                                "data": f_enc
+                            })
+                            client.send(f_packet.encode())
+                else:
+                    print(f"[УВАГА] Повідомлення від {username} було пошкоджено!")
+
+            except Exception as e:
+                print(f"[Відключення] {username} покинув чат.")
+                self.clients.remove(c)
+                del self.username_lookup[c]
+                del self.client_keys[c]
+                c.close()
+                break
 
 if __name__ == "__main__":
     s = Server(9001)
